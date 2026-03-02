@@ -1,0 +1,23 @@
+# Solution (not for students)
+ServerSolution/
+
+# Build results
+**/bin/
+**/obj/
+
+# User-specific files
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# VS Code
+.vscode/
+
+# Rider / JetBrains
+.idea/
+*.sln.iml
+
+# OS junk
+.DS_Store
+Thumbs.db

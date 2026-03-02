@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="ChargingStations/ChargingStations.csproj" />
+  <Project Path="Server/Server.csproj" />
+</Solution>
