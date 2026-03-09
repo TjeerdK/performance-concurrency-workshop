@@ -1,6 +1,6 @@
 # ihomer Performance: Concurrency Workshop
 
-A workshop for learning the **Producer-Consumer pattern** and **async I/O** in C#, using a simulated OCPP 1.6 charging station backend.
+A workshop for learning the **Producer-Consumer pattern** and **async I/O** [in .NET C# V10](https://dotnet.microsoft.com/en-us/download/dotnet/10.0), using a simulated OCPP 1.6 charging station backend.
 
 ## The Problem
 
