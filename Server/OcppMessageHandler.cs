@@ -5,7 +5,7 @@ namespace Server;
 
 public static class OcppMessageHandler
 {
-    public static string? HandleMessage(string stationId, string json)
+    public static string? HandleMessage(string stationId, string json, int workerId)
     {
         try
         {
@@ -21,7 +21,7 @@ public static class OcppMessageHandler
                 var action = array[2]?.GetValue<string>() ?? "";
                 var payload = array[3]?.AsObject() ?? new JsonObject();
 
-                Log($"[{stationId}] {action}");
+                Log($"[{stationId}] {action} (Worker {workerId})");
 
                 var response = HandleAction(stationId, action, payload);
 

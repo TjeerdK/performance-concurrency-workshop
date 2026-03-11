@@ -4,50 +4,95 @@ using System.Net.WebSockets;
 using System.Text;
 using Server;
 
+//SelfAdded
+int WorkerCount = Environment.ProcessorCount;
+
 var messageQueue = new BlockingCollection<QueuedMessage>();
 var connections = new ConcurrentDictionary<string, WebSocket>();
 
-var processorThread = new Thread(() => ProcessMessages(messageQueue))
+
+//SelfAdded
+var workerThreads = new Thread[WorkerCount];
+for(int i = 0; i < WorkerCount; i++)
 {
-    IsBackground = true,
-    Name = "OCPP-SingleThread"
-};
-processorThread.Start();
+    var workerId = i + 1;
+    workerThreads[i] = new Thread(() => ProcessMessages(messageQueue, workerId))
+    {
+        IsBackground = true,
+        Name = $"OCPP-Worker-{workerId}"
+    };
+    workerThreads[i].Start();
+}
+// var processorThread = new Thread(() => ProcessMessages(messageQueue))
+// {
+//     IsBackground = true,
+//     Name = "OCPP-SingleThread"
+// };
+// processorThread.Start();
 
 var listener = new HttpListener();
 listener.Prefixes.Add("http://localhost:8080/");
 listener.Start();
 OcppMessageHandler.Log("Listening on ws://localhost:8080/{stationId}");
 
-while (true)
+// while (true)
+// {
+//     var context = listener.GetContext();
+
+//     if (!context.Request.IsWebSocketRequest)
+//     {
+//         context.Response.StatusCode = 400;
+//         context.Response.Close();
+//         continue;
+//     }
+
+//     var stationId = context.Request.Url?.AbsolutePath.TrimStart('/') ?? "unknown";
+//     var wsContext = context.AcceptWebSocketAsync("ocpp1.6").GetAwaiter().GetResult();
+//     var webSocket = wsContext.WebSocket;
+
+//     connections[stationId] = webSocket;
+
+//     // Start a thread to receive messages from this connection
+//     var connectionThread = new Thread(() => ReceiveMessages(stationId, webSocket, messageQueue, connections))
+//     {
+//         IsBackground = true,
+//         Name = $"Connection-{stationId}"
+//     };
+//     connectionThread.Start();
+
+//     OcppMessageHandler.Log($"[CONNECT] Station '{stationId}' connected");
+// }
+
+await AcceptConnectionsAsync(listener, messageQueue, connections);
+
+static async Task AcceptConnectionsAsync(HttpListener listener,
+    BlockingCollection<QueuedMessage> queue,
+    ConcurrentDictionary<string, WebSocket> connections)
 {
-    var context = listener.GetContext();
-
-    if (!context.Request.IsWebSocketRequest)
+    while (true)
     {
-        context.Response.StatusCode = 400;
-        context.Response.Close();
-        continue;
+        var context = await listener.GetContextAsync();
+
+        if (!context.Request.IsWebSocketRequest)
+        {
+            context.Response.StatusCode = 400;
+            context.Response.Close();
+            continue;
+        }
+
+        var stationId = context.Request.Url?.AbsolutePath.TrimStart('/') ?? "unknown";
+        var wsContext = await context.AcceptWebSocketAsync("ocpp1.6");
+        var webSocket = wsContext.WebSocket;
+
+        connections[stationId] = webSocket;
+
+        _ = ReceiveMessagesAsync(stationId, webSocket, queue, connections);
+
+        OcppMessageHandler.Log($"[CONNECT] Station '{stationId}' connected");
     }
-
-    var stationId = context.Request.Url?.AbsolutePath.TrimStart('/') ?? "unknown";
-    var wsContext = context.AcceptWebSocketAsync("ocpp1.6").GetAwaiter().GetResult();
-    var webSocket = wsContext.WebSocket;
-
-    connections[stationId] = webSocket;
-
-    // Start a thread to receive messages from this connection
-    var connectionThread = new Thread(() => ReceiveMessages(stationId, webSocket, messageQueue, connections))
-    {
-        IsBackground = true,
-        Name = $"Connection-{stationId}"
-    };
-    connectionThread.Start();
-
-    OcppMessageHandler.Log($"[CONNECT] Station '{stationId}' connected");
 }
 
-static void ReceiveMessages(
+static async Task ReceiveMessagesAsync(
     string stationId,
     WebSocket webSocket,
     BlockingCollection<QueuedMessage> queue,
@@ -59,12 +104,11 @@ static void ReceiveMessages(
     {
         while (webSocket.State == WebSocketState.Open)
         {
-            var result = webSocket.ReceiveAsync(buffer, CancellationToken.None).GetAwaiter().GetResult();
+            var result = await webSocket.ReceiveAsync(buffer, CancellationToken.None);
 
             if (result.MessageType == WebSocketMessageType.Close)
             {
-                webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closing", CancellationToken.None)
-                    .GetAwaiter().GetResult();
+                await webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closing", CancellationToken.None);
                 break;
             }
 
@@ -80,7 +124,7 @@ static void ReceiveMessages(
     }
 }
 
-static void ProcessMessages(BlockingCollection<QueuedMessage> queue)
+static void ProcessMessages(BlockingCollection<QueuedMessage> queue, int workerId)
 {
     foreach (var item in queue.GetConsumingEnumerable())
     {
@@ -90,7 +134,7 @@ static void ProcessMessages(BlockingCollection<QueuedMessage> queue)
             Thread.Sleep(500);
 
             // Handle the OCPP message
-            var response = OcppMessageHandler.HandleMessage(item.StationId, item.Message);
+            var response = OcppMessageHandler.HandleMessage(item.StationId, item.Message, workerId);
 
             // Send response back to the charging station
             if (response != null && item.WebSocket.State == WebSocketState.Open)
